@@ -1,0 +1,262 @@
+:root {
+  --bg-1: #0e071c;
+  --bg-2: #1a1032;
+  --card: rgba(28, 22, 48, 0.75);
+  --text: #f4f1ff;
+  --sub: #bfb7df;
+  --pink: #ff4fb0;
+  --purple: #9054ff;
+  --cyan: #42d9ff;
+  --danger: #ff5d77;
+  --ok: #50e3a4;
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  --radius: 16px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: linear-gradient(165deg, var(--bg-1), var(--bg-2));
+  color: var(--text);
+  font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", system-ui, sans-serif;
+}
+
+.app-shell {
+  min-height: 100dvh;
+  padding: 16px 16px 84px;
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+.topbar {
+  padding: 12px 16px;
+  margin-bottom: 16px;
+}
+
+.topbar h1 {
+  margin: 0;
+  font-size: 1.6rem;
+}
+
+.topbar p {
+  margin: 4px 0 0;
+  color: var(--sub);
+  font-size: 0.9rem;
+}
+
+.glass {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(20, 16, 36, 0.55);
+  backdrop-filter: blur(6px);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.view {
+  display: none;
+  gap: 12px;
+}
+
+.view.active {
+  display: grid;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+
+h2, h3, p {
+  margin-top: 0;
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.stat {
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.stat strong {
+  display: block;
+  font-size: 1.35rem;
+}
+
+.actions {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+button,
+select,
+input,
+textarea {
+  font: inherit;
+  border: none;
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+button {
+  cursor: pointer;
+}
+
+.btn-gradient {
+  color: #fff;
+  background: linear-gradient(120deg, var(--pink), var(--purple), var(--cyan));
+}
+
+.btn-subtle {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text);
+}
+
+label {
+  font-size: 0.85rem;
+  color: var(--sub);
+  display: block;
+  margin-bottom: 4px;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 10px;
+}
+
+textarea {
+  min-height: 80px;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip,
+.badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.75rem;
+}
+
+.badge.key {
+  background: rgba(66, 217, 255, 0.2);
+  color: #8ce9ff;
+}
+
+.badge.skill {
+  background: rgba(255, 79, 176, 0.2);
+  color: #ff8dcb;
+}
+
+.badge.low {
+  background: rgba(80, 227, 164, 0.2);
+}
+
+.badge.mid {
+  background: rgba(255, 200, 91, 0.25);
+}
+
+.badge.high {
+  background: rgba(255, 93, 119, 0.25);
+}
+
+.chip {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.song-title {
+  font-weight: 700;
+  font-size: 1.1rem;
+  margin-bottom: 2px;
+}
+
+.sub {
+  color: var(--sub);
+  font-size: 0.85rem;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.bottom-nav {
+  position: fixed;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(680px, calc(100% - 20px));
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  padding: 8px;
+}
+
+.nav-btn {
+  background: transparent;
+  color: var(--sub);
+  padding: 10px 8px;
+  font-size: 0.8rem;
+}
+
+.nav-btn.active {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.list-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.empty {
+  text-align: center;
+  padding: 24px 16px;
+  color: var(--sub);
+  line-height: 1.7;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.danger {
+  background: var(--danger);
+  color: #fff;
+}
+
+.recent-item {
+  padding: 8px 0;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.12);
+}
+
+small.error {
+  color: #ff9cb0;
+  display: block;
+  margin-top: -8px;
+  margin-bottom: 8px;
+}
