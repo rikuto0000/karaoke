@@ -1,9 +1,16 @@
 const STORAGE_KEY = "utadeck_songs_v1";
+const AI_SETTINGS_KEY = "utadeck_ai_settings_v1";
 const HISTORY_DATE = () => new Date().toISOString();
 
 const TAGS = {
   mood: ["盛り上げ", "エモい", "バラード", "ネタ", "無難", "締め", "かっこいい", "かわいい", "懐メロ", "最新曲"],
   scene: ["友達", "職場", "初対面", "デート", "ヒトカラ", "二次会"],
+};
+
+const DEFAULT_AI_SETTINGS = {
+  provider: "heuristic", // heuristic | ollama
+  ollamaBaseUrl: "http://localhost:11434",
+  ollamaModel: "llama3.2:3b",
 };
 
 const SAMPLE_SONGS = [
@@ -111,10 +118,10 @@ const SAMPLE_SONGS = [
 
 const state = {
   songs: [],
+  aiSettings: { ...DEFAULT_AI_SETTINGS },
   activeView: "home",
   filters: { q: "", artist: "", tag: "", skill: "", key: "" },
   selectedSongId: null,
-  randomSongId: null,
 };
 
 const views = {
@@ -137,9 +144,14 @@ init();
 
 function init() {
   const saved = localStorage.getItem(STORAGE_KEY);
+  const savedAiSettings = localStorage.getItem(AI_SETTINGS_KEY);
   const baseSongs = saved ? JSON.parse(saved) : SAMPLE_SONGS;
+
   state.songs = baseSongs.map(normalizeSong);
+  state.aiSettings = savedAiSettings ? { ...DEFAULT_AI_SETTINGS, ...JSON.parse(savedAiSettings) } : { ...DEFAULT_AI_SETTINGS };
+
   persist();
+  persistAISettings();
   wireNav();
   renderAll();
 }
@@ -168,6 +180,10 @@ function normalizeSong(song) {
 
 function persist() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state.songs));
+}
+
+function persistAISettings() {
+  localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(state.aiSettings));
 }
 
 function wireNav() {
@@ -208,6 +224,7 @@ function renderHome() {
         <div class="stat"><span>登録曲数</span><strong>${state.songs.length}</strong></div>
         <div class="stat"><span>今日歌った曲</span><strong>${todayCount}</strong></div>
       </div>
+      <p class="sub" style="margin-top:8px;">AIモード: ${state.aiSettings.provider === "ollama" ? `無料AI(Ollama:${escapeHtml(state.aiSettings.ollamaModel)})` : "簡易ロジック"}</p>
     </article>
 
     <article class="card">
@@ -283,6 +300,16 @@ function renderAdd(song = null, draftOverride = null) {
     <article class="card">
       <h2>${isEdit ? "曲を編集" : "曲を追加"}</h2>
       <form id="songForm">
+        <article class="card ai-config">
+          <h3>無料AI設定</h3>
+          ${select("aiProvider", "AI方式", ["heuristic", "ollama"], state.aiSettings.provider)}
+          <label for="ollamaBaseUrl">Ollama URL</label>
+          <input id="ollamaBaseUrl" value="${escapeHtml(state.aiSettings.ollamaBaseUrl)}" placeholder="http://localhost:11434" />
+          <label for="ollamaModel">Ollamaモデル</label>
+          <input id="ollamaModel" value="${escapeHtml(state.aiSettings.ollamaModel)}" placeholder="llama3.2:3b" />
+          <p class="sub">※ ollama は無料で使えるローカルLLMです。未設定時は簡易ロジックに自動フォールバックします。</p>
+        </article>
+
         ${input("title", "曲名 *", draft.title, "text")}
         <small class="error" id="errTitle"></small>
         ${input("artist", "アーティスト", draft.artist, "text")}
@@ -312,10 +339,8 @@ function renderAdd(song = null, draftOverride = null) {
           <h3>要約結果</h3>
           <label for="lyricsSummary">歌詞要約</label>
           <textarea id="lyricsSummary" placeholder="要約結果が入ります">${escapeHtml(draft.lyricsSummary)}</textarea>
-
           <label for="singingTips">歌い方メモ</label>
           <textarea id="singingTips" placeholder="歌い方のポイント">${escapeHtml(draft.singingTips)}</textarea>
-
           <label for="autoTagReason">自動タグ理由</label>
           <textarea id="autoTagReason" placeholder="タグ付与理由">${escapeHtml(draft.autoTagReason)}</textarea>
         </article>
@@ -328,25 +353,50 @@ function renderAdd(song = null, draftOverride = null) {
     </article>
   `;
 
-  views.add.querySelector("#summarizeLyrics").addEventListener("click", () => {
+  views.add.querySelector("#summarizeLyrics").addEventListener("click", async (e) => {
     const nextDraft = collectDraftFromForm();
-    const summarized = summarizeLyrics(nextDraft.lyricsInput);
-    nextDraft.lyricsSummary = summarized.lyricsSummary;
-    nextDraft.singingTips = summarized.singingTips;
+    syncAISettingsFromForm();
+    setButtonBusy(e.currentTarget, true, "要約中...");
+
+    try {
+      const summarized = await summarizeLyricsWithAI(nextDraft.lyricsInput, state.aiSettings);
+      nextDraft.lyricsSummary = summarized.lyricsSummary;
+      nextDraft.singingTips = summarized.singingTips;
+      if (summarized.reason) nextDraft.autoTagReason = summarized.reason;
+    } catch (err) {
+      const fallback = summarizeLyrics(nextDraft.lyricsInput);
+      nextDraft.lyricsSummary = fallback.lyricsSummary;
+      nextDraft.singingTips = fallback.singingTips;
+      nextDraft.autoTagReason = `AI要約失敗のため簡易要約を使用: ${String(err.message || err)}`;
+    }
+
     renderAdd(song, nextDraft);
   });
 
-  views.add.querySelector("#autoTags").addEventListener("click", () => {
+  views.add.querySelector("#autoTags").addEventListener("click", async (e) => {
     const nextDraft = collectDraftFromForm();
-    const auto = generateAutoTags(nextDraft);
-    nextDraft.moodTags = auto.moodTags;
-    nextDraft.sceneTags = auto.sceneTags;
-    nextDraft.autoTagReason = auto.autoTagReason;
+    syncAISettingsFromForm();
+    setButtonBusy(e.currentTarget, true, "付与中...");
+
+    try {
+      const auto = await generateAutoTagsWithAI(nextDraft, state.aiSettings);
+      nextDraft.moodTags = auto.moodTags;
+      nextDraft.sceneTags = auto.sceneTags;
+      nextDraft.autoTagReason = auto.autoTagReason;
+    } catch (err) {
+      const fallback = generateAutoTags(nextDraft);
+      nextDraft.moodTags = fallback.moodTags;
+      nextDraft.sceneTags = fallback.sceneTags;
+      nextDraft.autoTagReason = `AIタグ失敗のため簡易タグを使用: ${String(err.message || err)}`;
+    }
+
     renderAdd(song, nextDraft);
   });
 
   views.add.querySelector("#songForm").addEventListener("submit", (e) => {
     e.preventDefault();
+    syncAISettingsFromForm();
+
     const data = formData(song?.id);
     if (!validate(data)) return;
 
@@ -363,6 +413,28 @@ function renderAdd(song = null, draftOverride = null) {
     persist();
     renderAll();
   });
+}
+
+function syncAISettingsFromForm() {
+  const providerEl = views.add.querySelector("#aiProvider");
+  const baseEl = views.add.querySelector("#ollamaBaseUrl");
+  const modelEl = views.add.querySelector("#ollamaModel");
+  if (!providerEl || !baseEl || !modelEl) return;
+
+  state.aiSettings = {
+    provider: providerEl.value,
+    ollamaBaseUrl: baseEl.value.trim() || DEFAULT_AI_SETTINGS.ollamaBaseUrl,
+    ollamaModel: modelEl.value.trim() || DEFAULT_AI_SETTINGS.ollamaModel,
+  };
+
+  persistAISettings();
+}
+
+function setButtonBusy(btn, busy, label) {
+  if (!btn) return;
+  btn.disabled = busy;
+  if (busy) btn.dataset.prevLabel = btn.textContent;
+  btn.textContent = busy ? label : btn.dataset.prevLabel || btn.textContent;
 }
 
 function collectDraftFromForm() {
@@ -385,6 +457,76 @@ function collectDraftFromForm() {
   };
 }
 
+async function summarizeLyricsWithAI(lyricsInput, aiSettings) {
+  if (aiSettings.provider !== "ollama") return summarizeLyrics(lyricsInput);
+
+  const prompt = [
+    "あなたはカラオケ練習アシスタントです。",
+    "入力された歌詞の一部から、短い要約と歌唱アドバイスを作ってください。",
+    "返答はJSONのみ。キーは lyricsSummary と singingTips。日本語で20〜80文字程度。",
+    `歌詞入力: ${lyricsInput || ""}`,
+  ].join("\n");
+
+  const result = await callOllamaJSON(aiSettings, prompt);
+  return {
+    lyricsSummary: safeString(result.lyricsSummary) || summarizeLyrics(lyricsInput).lyricsSummary,
+    singingTips: safeString(result.singingTips) || summarizeLyrics(lyricsInput).singingTips,
+    reason: "無料AI (Ollama) で要約を生成しました。",
+  };
+}
+
+async function generateAutoTagsWithAI(songInput, aiSettings) {
+  if (aiSettings.provider !== "ollama") return generateAutoTags(songInput);
+
+  const prompt = [
+    "あなたはカラオケ選曲アシスタントです。",
+    `雰囲気タグ候補: ${TAGS.mood.join(",")}`,
+    `シーンタグ候補: ${TAGS.scene.join(",")}`,
+    "候補外のタグは使わないこと。",
+    "JSONのみで返答。キーは moodTags(array), sceneTags(array), autoTagReason(string)。",
+    `曲名:${songInput.title}`,
+    `アーティスト:${songInput.artist}`,
+    `メモ:${songInput.memo}`,
+    `歌詞要約:${songInput.lyricsSummary}`,
+    `歌い方メモ:${songInput.singingTips}`,
+  ].join("\n");
+
+  const result = await callOllamaJSON(aiSettings, prompt);
+  const moodTags = normalizeTags(result.moodTags, TAGS.mood);
+  const sceneTags = normalizeTags(result.sceneTags, TAGS.scene);
+
+  if (!moodTags.length || !sceneTags.length) return generateAutoTags(songInput);
+
+  return {
+    moodTags,
+    sceneTags,
+    autoTagReason: safeString(result.autoTagReason) || "無料AI (Ollama) による推定タグ。",
+  };
+}
+
+async function callOllamaJSON(aiSettings, prompt) {
+  const url = `${aiSettings.ollamaBaseUrl.replace(/\/+$/, "")}/api/generate`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: aiSettings.ollamaModel,
+      prompt,
+      stream: false,
+      format: "json",
+      options: { temperature: 0.3 },
+    }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Ollama API error: ${res.status}`);
+  }
+
+  const payload = await res.json();
+  if (!payload.response) throw new Error("Ollama response missing");
+  return JSON.parse(payload.response);
+}
+
 function summarizeLyrics(lyricsInput) {
   const text = (lyricsInput || "").trim();
   if (!text) {
@@ -404,10 +546,10 @@ function summarizeLyrics(lyricsInput) {
   const tone = emoCount >= 2 ? "感情表現が強く" : "言葉の流れが自然で";
   const speed = rhythmCount >= 2 ? "やや速めの展開" : "落ち着いた展開";
 
-  const lyricsSummary = `この歌詞は${tone}、${speed}が特徴です。主題を短いフレーズで伝える構成です。`;
-  const singingTips = `${rhythmCount >= 2 ? "子音を明瞭にしてリズムを先行" : "母音を丁寧に伸ばして抑揚を作る"}と歌いやすくなります。`;
-
-  return { lyricsSummary, singingTips };
+  return {
+    lyricsSummary: `この歌詞は${tone}、${speed}が特徴です。主題を短いフレーズで伝える構成です。`,
+    singingTips: `${rhythmCount >= 2 ? "子音を明瞭にしてリズムを先行" : "母音を丁寧に伸ばして抑揚を作る"}と歌いやすくなります。`,
+  };
 }
 
 function generateAutoTags(songInput) {
@@ -453,6 +595,15 @@ function generateAutoTags(songInput) {
   };
 }
 
+function normalizeTags(value, allowed) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.map((v) => String(v).trim()))].filter((v) => allowed.includes(v));
+}
+
+function safeString(v) {
+  return typeof v === "string" ? v.trim() : "";
+}
+
 function renderDetail() {
   const song = state.songs.find((s) => s.id === state.selectedSongId);
   if (!song) {
@@ -477,12 +628,9 @@ function renderDetail() {
 
       <article class="card summary-card" style="margin-top: 10px;">
         <h3>歌詞・歌唱メモ</h3>
-        <p>歌詞要約</p>
-        <div class="sub">${song.lyricsSummary || "未登録"}</div>
-        <p>歌い方メモ</p>
-        <div class="sub">${song.singingTips || "未登録"}</div>
-        <p>自動タグ理由</p>
-        <div class="sub">${song.autoTagReason || "未登録"}</div>
+        <p>歌詞要約</p><div class="sub">${song.lyricsSummary || "未登録"}</div>
+        <p>歌い方メモ</p><div class="sub">${song.singingTips || "未登録"}</div>
+        <p>自動タグ理由</p><div class="sub">${song.autoTagReason || "未登録"}</div>
       </article>
 
       <h3>歌唱履歴</h3>
@@ -528,6 +676,7 @@ function renderScene() {
       mood: views.scene.querySelector("#moodNow").value,
       throat: views.scene.querySelector("#throat").value,
     };
+
     const ranked = rankByScene(cond).slice(0, 10);
     views.scene.querySelector("#sceneResult").innerHTML = ranked.length ? ranked.map(songCard).join("") : emptyState("条件に合う曲が見つかりませんでした。");
     bindSongCardActions(views.scene);
@@ -563,7 +712,6 @@ function drawRandom() {
   }
 
   const song = pool[Math.floor(Math.random() * pool.length)];
-  state.randomSongId = song.id;
   box.innerHTML = `
     <article class="card">
       <h3>🎯 ${song.title}</h3>
@@ -678,6 +826,7 @@ function formData(existingId = null) {
 
 function validate(data) {
   ["errTitle", "errKey", "errHype", "errDifficulty"].forEach((id) => (views.add.querySelector(`#${id}`).textContent = ""));
+
   let ok = true;
   if (!data.title) {
     views.add.querySelector("#errTitle").textContent = "曲名は必須です。";
@@ -719,7 +868,7 @@ function input(id, labelText, value, type, attrs = {}) {
 }
 
 function select(id, labelText, options, value) {
-  return `<label for="${id}">${labelText}</label><select id="${id}">${options.map((o) => `<option ${o === value ? "selected" : ""}>${o}</option>`).join("")}</select>`;
+  return `<label for="${id}">${labelText}</label><select id="${id}">${options.map((o) => `<option value="${o}" ${o === value ? "selected" : ""}>${o}</option>`).join("")}</select>`;
 }
 
 function multiSelect(name, labelText, options, selected) {
@@ -772,5 +921,9 @@ function strainClass(v) {
 }
 
 function escapeHtml(str) {
-  return str.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+  return String(str)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
 }

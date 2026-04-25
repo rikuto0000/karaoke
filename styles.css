@@ -273,3 +273,13 @@ small.error {
 #songForm .actions button {
   min-height: 44px;
 }
+
+.ai-config {
+  margin-bottom: 12px;
+  border: 1px solid rgba(144, 84, 255, 0.35);
+}
+
+button:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}

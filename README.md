@@ -87,6 +87,27 @@ python3 -m http.server 5173
 - `generateAutoTags(songInput)` / `summarizeLyrics(lyricsInput)` を分離し、将来AI APIへ差し替えしやすい構造
 - 既存localStorageデータは正規化して不足項目を補完（後方互換）
 
+## 無料AI導入（Ollama）
+
+UtaDeck は無料で使えるローカルLLM **Ollama** に対応しました。
+
+- 追加/編集画面の「無料AI設定」で `AI方式=ollama` を選択
+- 既定値: URL `http://localhost:11434` / モデル `llama3.2:3b`
+- 接続失敗時は自動で簡易ロジックへフォールバック
+
+### Ollama セットアップ例
+
+```bash
+# 1) ollama をインストール（公式手順）
+# 2) モデルを取得
+ollama pull llama3.2:3b
+
+# 3) 起動（通常は常駐）
+ollama serve
+```
+
+> スマホから使う場合は、Ollama を動かすPCのIPを `Ollama URL` に設定してください（例: `http://192.168.1.10:11434`）。
+
 ## 将来拡張の想定
 
 - AIセットリスト作成
