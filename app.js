@@ -332,8 +332,9 @@ function renderAdd(song = null, draftOverride = null) {
 
         <div class="actions">
           <button id="summarizeLyrics" type="button" class="btn-subtle">歌詞を要約する</button>
-          <button id="autoTags" type="button" class="btn-subtle">タグを自動付与</button>
+          <button id="autoTags" type="button" class="btn-subtle">曲名から客観タグ自動化</button>
         </div>
+        <p class="sub">AIは客観情報（雰囲気タグ/シーンタグ/要約）のみ提案します。難易度・喉のキツさなど主観項目は手動入力してください。</p>
 
         <article class="card summary-card">
           <h3>要約結果</h3>
@@ -375,6 +376,12 @@ function renderAdd(song = null, draftOverride = null) {
 
   views.add.querySelector("#autoTags").addEventListener("click", async (e) => {
     const nextDraft = collectDraftFromForm();
+    if (!nextDraft.title.trim()) {
+      nextDraft.autoTagReason = "曲名を入力してから自動化してください。";
+      renderAdd(song, nextDraft);
+      return;
+    }
+
     syncAISettingsFromForm();
     setButtonBusy(e.currentTarget, true, "付与中...");
 
@@ -479,16 +486,15 @@ async function generateAutoTagsWithAI(songInput, aiSettings) {
   if (aiSettings.provider !== "ollama") return generateAutoTags(songInput);
 
   const prompt = [
-    "あなたはカラオケ選曲アシスタントです。",
+    "あなたはカラオケ選曲アシスタントです。曲の客観的な印象のみを判定してください。",
     `雰囲気タグ候補: ${TAGS.mood.join(",")}`,
     `シーンタグ候補: ${TAGS.scene.join(",")}`,
     "候補外のタグは使わないこと。",
     "JSONのみで返答。キーは moodTags(array), sceneTags(array), autoTagReason(string)。",
     `曲名:${songInput.title}`,
     `アーティスト:${songInput.artist}`,
-    `メモ:${songInput.memo}`,
     `歌詞要約:${songInput.lyricsSummary}`,
-    `歌い方メモ:${songInput.singingTips}`,
+    "主観項目（難易度/喉のキツさ/得意度）は無視してください。",
   ].join("\n");
 
   const result = await callOllamaJSON(aiSettings, prompt);
@@ -500,7 +506,7 @@ async function generateAutoTagsWithAI(songInput, aiSettings) {
   return {
     moodTags,
     sceneTags,
-    autoTagReason: safeString(result.autoTagReason) || "無料AI (Ollama) による推定タグ。",
+    autoTagReason: safeString(result.autoTagReason) || "無料AI (Ollama) が曲名などの客観情報から推定したタグ。",
   };
 }
 
@@ -553,7 +559,7 @@ function summarizeLyrics(lyricsInput) {
 }
 
 function generateAutoTags(songInput) {
-  const text = [songInput.title, songInput.artist, songInput.memo, songInput.lyricsSummary, songInput.singingTips]
+  const text = [songInput.title, songInput.artist, songInput.lyricsSummary]
     .join(" ")
     .toLowerCase();
 
@@ -591,7 +597,7 @@ function generateAutoTags(songInput) {
   return {
     moodTags: normalizedMood,
     sceneTags: normalizedScene,
-    autoTagReason: `入力テキストのキーワード一致により、雰囲気:${normalizedMood.join("/")}、シーン:${normalizedScene.join("/")} を自動付与しました。`,
+    autoTagReason: `曲名/アーティスト/歌詞要約のキーワード一致により、雰囲気:${normalizedMood.join("/")}、シーン:${normalizedScene.join("/")} を自動付与しました。`,
   };
 }
 
