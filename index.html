@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>UtaDeck</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar glass">
+        <h1>UtaDeck</h1>
+        <p id="todayDate"></p>
+      </header>
+
+      <main id="appMain">
+        <section id="home" class="view active"></section>
+        <section id="list" class="view"></section>
+        <section id="add" class="view"></section>
+        <section id="scene" class="view"></section>
+        <section id="random" class="view"></section>
+        <section id="detail" class="view"></section>
+      </main>
+
+      <nav class="bottom-nav glass">
+        <button data-view="home" class="nav-btn active">ホーム</button>
+        <button data-view="list" class="nav-btn">一覧</button>
+        <button data-view="add" class="nav-btn">追加</button>
+        <button data-view="scene" class="nav-btn">シーン</button>
+        <button data-view="random" class="nav-btn">ランダム</button>
+      </nav>
+    </div>
+
+    <dialog id="confirmDialog">
+      <p id="confirmMessage"></p>
+      <div class="dialog-actions">
+        <button id="confirmCancel">キャンセル</button>
+        <button id="confirmOk" class="danger">削除する</button>
+      </div>
+    </dialog>
+
+    <script src="app.js"></script>
+  </body>
+</html>
